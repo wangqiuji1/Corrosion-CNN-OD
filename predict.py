@@ -1,7 +1,4 @@
-#-----------------------------------------------------------------------#
-#   predict.py将单张图片预测、摄像头检测、FPS测试和目录遍历检测等功能
-#   整合到了一个py文件中，通过指定mode进行模式的修改。
-#-----------------------------------------------------------------------#
+
 import time
 
 import cv2
@@ -10,9 +7,10 @@ from PIL import Image
 
 from yolo import YOLO
 
+# Single picture prediction
 if __name__ == "__main__":
     yolo = YOLO()
-
+    # Single picture prediction
     mode = "predict"
 
     crop            = False
@@ -23,7 +21,7 @@ if __name__ == "__main__":
     video_fps       = 25.0
 
     test_interval   = 100
-    fps_image_path  = "img/street.jpg"
+    fps_image_path  = "img/xx.jpg"
 
     dir_origin_path = "img/"
     dir_save_path   = "img_out/"
