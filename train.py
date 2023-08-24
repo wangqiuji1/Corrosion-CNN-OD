@@ -1,6 +1,4 @@
-#-------------------------------------#
-#       对数据集进行训练
-#-------------------------------------#
+
 import datetime
 import os
 
@@ -22,9 +20,9 @@ from utils.utils_fit import fit_one_epoch
 
 
 
-
+# Training
 if __name__ == "__main__":
-
+   # Cuda
     Cuda            = True
 
     distributed     = False
@@ -53,12 +51,12 @@ if __name__ == "__main__":
     # mixup               = True
     mixup = False
     mixup_prob          = 0.5
-    # .......................................
+    # 
     cutmix = True
     cutmix_prob = 0.5
     # cutout = True
     # cutout_prob = 0.5
-    # ........................................
+    # 
     # special_aug_ratio   = 0.7
     special_aug_ratio = 0
 
