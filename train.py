@@ -22,20 +22,20 @@ from utils.utils_fit import fit_one_epoch
 
 # Training
 if __name__ == "__main__":
-   # Cuda
+    # Whether to use Cuda
     Cuda            = True
 
     distributed     = False
 
     sync_bn         = False
-
+    # Whether fp16 uses mixed precision training
     fp16            = False
 
     classes_path    = 'model_data/new_classes.txt'
 
     anchors_path    = 'model_data/yolo_anchors.txt'
     anchors_mask    = [[6, 7, 8], [3, 4, 5], [0, 1, 2]]
-
+    # pre-train model
     model_path      = 'model_data/yolov7_weights.pth'
 
 
@@ -44,12 +44,12 @@ if __name__ == "__main__":
     phi             = 'l'
 
     pretrained      = False
-
+    # mosaic data augmentation
     mosaic              = True
     # mosaic = False
     mosaic_prob         = 0.5
-    # mixup               = True
-    mixup = False
+    # mixup data augmentation
+    mixup = True
     mixup_prob          = 0.5
     # 
     cutmix = True
@@ -63,7 +63,7 @@ if __name__ == "__main__":
     label_smoothing     = 0
     # label_smoothing = 0.005
 
-
+    # hyperparameter settings
     Init_Epoch          = 0
     Freeze_Epoch        = 50
     Freeze_batch_size   = 8
@@ -93,11 +93,12 @@ if __name__ == "__main__":
 
     num_workers         = 4
 
-
+    # Training image paths and labels
     train_annotation_path   = '2007_train.txt'
+    # Val image paths and labels
     val_annotation_path     = '2007_val.txt'
 
-
+    # Set the graphics card used
     ngpus_per_node  = torch.cuda.device_count()
     if distributed:
         dist.init_process_group(backend="nccl")
@@ -116,7 +117,7 @@ if __name__ == "__main__":
     class_names, num_classes = get_classes(classes_path)
     anchors, num_anchors     = get_anchors(anchors_path)
 
-
+    # load pretrained model
     if pretrained:
         if distributed:
             if local_rank == 0:
@@ -125,7 +126,7 @@ if __name__ == "__main__":
         else:
             download_weights(phi)
             
-
+    # create YOLO model
     model = YoloBody(anchors_mask, num_classes, phi, pretrained=pretrained)
     if not pretrained:
         weights_init(model)
@@ -150,11 +151,12 @@ if __name__ == "__main__":
         if local_rank == 0:
             print("\nSuccessful Load Key:", str(load_key)[:500], "……\nSuccessful Load Key Num:", len(load_key))
             print("\nFail To Load Key:", str(no_load_key)[:500], "……\nFail To Load Key num:", len(no_load_key))
-            print("\n\033[1;33;44m温馨提示，head部分没有载入是正常现象，Backbone部分没有载入是错误的。\033[0m")
+           
 
-
+    # define loss function
     yolo_loss    = YOLOLoss(anchors, num_classes, input_shape, anchors_mask, label_smoothing)
-
+    
+    # record loss
     if local_rank == 0:
         time_str        = datetime.datetime.strftime(datetime.datetime.now(),'%Y_%m_%d_%H_%M_%S')
         log_dir         = os.path.join(save_dir, "loss_" + str(time_str))
@@ -189,7 +191,7 @@ if __name__ == "__main__":
 
     ema = ModelEMA(model_train)
     
-
+    # Read the txt corresponding to the dataset
     with open(train_annotation_path, encoding='utf-8') as f:
         train_lines = f.readlines()
     with open(val_annotation_path, encoding='utf-8') as f:
@@ -209,16 +211,15 @@ if __name__ == "__main__":
         total_step  = num_train // Unfreeze_batch_size * UnFreeze_Epoch
         if total_step <= wanted_step:
             if num_train // Unfreeze_batch_size == 0:
-                raise ValueError('数据集过小，无法进行训练，请扩充数据集。')
+                raise ValueError('The dataset is too small for training, please expand the dataset.')
             wanted_epoch = wanted_step // (num_train // Unfreeze_batch_size) + 1
-            print("\n\033[1;33;44m[Warning] 使用%s优化器时，建议将训练总步长设置到%d以上。\033[0m"%(optimizer_type, wanted_step))
-            print("\033[1;33;44m[Warning] 本次运行的总训练数据量为%d，Unfreeze_batch_size为%d，共训练%d个Epoch，计算出总训练步长为%d。\033[0m"%(num_train, Unfreeze_batch_size, UnFreeze_Epoch, total_step))
-            print("\033[1;33;44m[Warning] 由于总训练步长为%d，小于建议总步长%d，建议设置总世代为%d。\033[0m"%(total_step, wanted_step, wanted_epoch))
+            print("\n\033[1;33;44m[Warning] When using the %s optimizer, it is recommended to set the total training step size to above %d.\033[0m"%(optimizer_type, wanted_step))
+            
 
 
     if True:
         UnFreeze_flag = False
-
+        # Freeze part of pre-trained model
         if Freeze_Train:
             for param in model.backbone.parameters():
                 param.requires_grad = False
@@ -226,14 +227,14 @@ if __name__ == "__main__":
 
         batch_size = Freeze_batch_size if Freeze_Train else Unfreeze_batch_size
 
-
+        # adaptively adjust learning rate
         nbs             = 64
         lr_limit_max    = 1e-3 if optimizer_type == 'adam' else 5e-2
         lr_limit_min    = 3e-4 if optimizer_type == 'adam' else 5e-4
         Init_lr_fit     = min(max(batch_size / nbs * Init_lr, lr_limit_min), lr_limit_max)
         Min_lr_fit      = min(max(batch_size / nbs * Min_lr, lr_limit_min * 1e-2), lr_limit_max * 1e-2)
 
-
+        # select optimizer
         pg0, pg1, pg2 = [], [], []  
         for k, v in model.named_modules():
             if hasattr(v, "bias") and isinstance(v.bias, nn.Parameter):
@@ -249,7 +250,7 @@ if __name__ == "__main__":
         optimizer.add_param_group({"params": pg1, "weight_decay": weight_decay})
         optimizer.add_param_group({"params": pg2})
 
-
+        # Get a learning rate schedule
         lr_scheduler_func = get_lr_scheduler(lr_decay_type, Init_lr_fit, Min_lr_fit, UnFreeze_Epoch)
         
 
@@ -257,7 +258,7 @@ if __name__ == "__main__":
         epoch_step_val  = num_val // batch_size
         
         if epoch_step == 0 or epoch_step_val == 0:
-            raise ValueError("数据集过小，无法继续进行训练，请扩充数据集。")
+            raise ValueError("The dataset is too small to continue training, please expand the dataset.")
 
         if ema:
             ema.updates     = epoch_step * Init_Epoch
@@ -267,9 +268,10 @@ if __name__ == "__main__":
         #                             mosaic=mosaic, cutout=cutout, mosaic_prob=mosaic_prob, cutout_prob=cutout_prob, train=True, special_aug_ratio=special_aug_ratio)
         # val_dataset = YoloDataset(val_lines, input_shape, num_classes, anchors, anchors_mask, epoch_length=UnFreeze_Epoch, \
         #                           mosaic=False, cutmix=False, mosaic_prob=0, cutmix_prob=0,train=False, special_aug_ratio=0)
-
+        # Load training dataset
         train_dataset   = YoloDataset(train_lines, input_shape, num_classes, anchors, anchors_mask, epoch_length=UnFreeze_Epoch, \
                                         mosaic=mosaic, mixup=mixup, cutmix=cutmix, mosaic_prob=mosaic_prob, mixup_prob=mixup_prob, cutmix_prob=cutmix_prob, train=True, special_aug_ratio=special_aug_ratio)
+        # Load val dataset
         val_dataset     = YoloDataset(val_lines, input_shape, num_classes, anchors, anchors_mask, epoch_length=UnFreeze_Epoch, \
                                         mosaic=False, mixup=False, cutmix=False, mosaic_prob=0, mixup_prob=0, cutmix_prob=0, train=False, special_aug_ratio=0)
         
@@ -295,7 +297,7 @@ if __name__ == "__main__":
         else:
             eval_callback   = None
         
-
+        # training model
         for epoch in range(Init_Epoch, UnFreeze_Epoch):
 
             if epoch >= Freeze_Epoch and not UnFreeze_flag and Freeze_Train:
@@ -317,7 +319,7 @@ if __name__ == "__main__":
                 epoch_step_val  = num_val // batch_size
 
                 if epoch_step == 0 or epoch_step_val == 0:
-                    raise ValueError("数据集过小，无法继续进行训练，请扩充数据集。")
+                    raise ValueError("The dataset is too small to continue training, please expand the dataset.")
                     
                 if ema:
                     ema.updates     = epoch_step * epoch
