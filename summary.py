@@ -1,5 +1,5 @@
 #--------------------------------------------#
-#   该部分代码用于看网络结构
+# network architecture
 #--------------------------------------------#
 import torch
 from thop import clever_format, profile
