@@ -1,5 +1,5 @@
 #--------------------------------------------#
-# network architecture
+# view network architecture
 #--------------------------------------------#
 import torch
 from thop import clever_format, profile
