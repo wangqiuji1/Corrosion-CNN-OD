@@ -12,6 +12,7 @@ from utils.utils import (cvtColor, get_anchors, get_classes, preprocess_input,
                          resize_image, show_config)
 from utils.utils_bbox import DecodeBox
 
+# YOLO model
 class YOLO(object):
     _defaults = {
 
@@ -42,7 +43,7 @@ class YOLO(object):
         else:
             return "Unrecognized attribute name '" + n + "'"
 
-
+    # init YOLO
     def __init__(self, **kwargs):
         self.__dict__.update(self._defaults)
         for name, value in kwargs.items():
@@ -62,9 +63,9 @@ class YOLO(object):
 
         show_config(**self._defaults)
 
-
+    # generate model
     def generate(self, onnx=False):
-
+        # Build the yolo model and load the weight of the yolo model
         self.net    = YoloBody(self.anchors_mask, self.num_classes, self.phi)
         device      = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.net.load_state_dict(torch.load(self.model_path, map_location=device))
@@ -75,7 +76,7 @@ class YOLO(object):
                 self.net = nn.DataParallel(self.net)
                 self.net = self.net.cuda()
 
-
+    # detect images
     def detect_image(self, image, crop = False, count = False):
 
         image_shape = np.array(np.shape(image)[0:2])
@@ -107,6 +108,7 @@ class YOLO(object):
         font        = ImageFont.truetype(font='model_data/simhei.ttf', size=np.floor(3e-2 * image.size[1] + 0.5).astype('int32'))
         thickness   = int(max((image.size[0] + image.size[1]) // np.mean(self.input_shape), 1))
 
+        # Whether to count
         if count:
             print("top_label:", top_label)
             classes_nums    = np.zeros([self.num_classes])
@@ -117,6 +119,7 @@ class YOLO(object):
                 classes_nums[i] = num
             print("classes_nums:", classes_nums)
 
+        # Whether to crop object
         if crop:
             for i, c in list(enumerate(top_boxes)):
                 top, left, bottom, right = top_boxes[i]
@@ -132,6 +135,7 @@ class YOLO(object):
                 crop_image.save(os.path.join(dir_save_path, "crop_" + str(i) + ".png"), quality=95, subsampling=0)
                 print("save crop_" + str(i) + ".png to " + dir_save_path)
 
+        # draw anchor
         for i, c in list(enumerate(top_label)):
             predicted_class = self.class_names[int(c)]
             box             = top_boxes[i]
@@ -163,6 +167,7 @@ class YOLO(object):
 
         return image
 
+    # get FPS
     def get_FPS(self, image, test_interval):
         image_shape = np.array(np.shape(image)[0:2])
 
@@ -197,85 +202,7 @@ class YOLO(object):
         tact_time = (t2 - t1) / test_interval
         return tact_time
 
-    def detect_heatmap(self, image, heatmap_save_path):
-        import cv2
-        import matplotlib.pyplot as plt
-        def sigmoid(x):
-            y = 1.0 / (1.0 + np.exp(-x))
-            return y
-
-        image       = cvtColor(image)
-
-        image_data  = resize_image(image, (self.input_shape[1],self.input_shape[0]), self.letterbox_image)
-
-        image_data  = np.expand_dims(np.transpose(preprocess_input(np.array(image_data, dtype='float32')), (2, 0, 1)), 0)
-
-        with torch.no_grad():
-            images = torch.from_numpy(image_data)
-            if self.cuda:
-                images = images.cuda()
-
-            outputs = self.net(images)
-        
-        plt.imshow(image, alpha=1)
-        plt.axis('off')
-        mask    = np.zeros((image.size[1], image.size[0]))
-        for sub_output in outputs:
-            sub_output = sub_output.cpu().numpy()
-            b, c, h, w = np.shape(sub_output)
-            sub_output = np.transpose(np.reshape(sub_output, [b, 3, -1, h, w]), [0, 3, 4, 1, 2])[0]
-            score      = np.max(sigmoid(sub_output[..., 4]), -1)
-            score      = cv2.resize(score, (image.size[0], image.size[1]))
-            normed_score    = (score * 255).astype('uint8')
-            mask            = np.maximum(mask, normed_score)
-            
-        plt.imshow(mask, alpha=0.5, interpolation='nearest', cmap="jet")
-
-        plt.axis('off')
-        plt.subplots_adjust(top=1, bottom=0, right=1,  left=0, hspace=0, wspace=0)
-        plt.margins(0, 0)
-        plt.savefig(heatmap_save_path, dpi=200, bbox_inches='tight', pad_inches = -0.1)
-        print("Save to the " + heatmap_save_path)
-        plt.show()
-
-    def convert_to_onnx(self, simplify, model_path):
-        import onnx
-        self.generate(onnx=True)
-
-        im                  = torch.zeros(1, 3, *self.input_shape).to('cpu')  # image size(1, 3, 512, 512) BCHW
-        input_layer_names   = ["images"]
-        output_layer_names  = ["output"]
-        
-        # Export the model
-        print(f'Starting export with onnx {onnx.__version__}.')
-        torch.onnx.export(self.net,
-                        im,
-                        f               = model_path,
-                        verbose         = False,
-                        opset_version   = 12,
-                        training        = torch.onnx.TrainingMode.EVAL,
-                        do_constant_folding = True,
-                        input_names     = input_layer_names,
-                        output_names    = output_layer_names,
-                        dynamic_axes    = None)
-
-        # Checks
-        model_onnx = onnx.load(model_path)  # load onnx model
-        onnx.checker.check_model(model_onnx)  # check onnx model
-
-        # Simplify onnx
-        if simplify:
-            import onnxsim
-            print(f'Simplifying with onnx-simplifier {onnxsim.__version__}.')
-            model_onnx, check = onnxsim.simplify(
-                model_onnx,
-                dynamic_input_shape=False,
-                input_shapes=None)
-            assert check, 'assert check failed'
-            onnx.save(model_onnx, model_path)
-
-        print('Onnx model save as {}'.format(model_path))
-
+    # get map 
     def get_map_txt(self, image_id, image, class_names, map_out_path):
         f = open(os.path.join(map_out_path, "detection-results/"+image_id+".txt"), "w", encoding='utf-8') 
         image_shape = np.array(np.shape(image)[0:2])
