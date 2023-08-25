@@ -6,7 +6,7 @@ import numpy as np
 
 from utils.utils import get_classes
 
-
+# Get 2007_train.txt and 2007_val.txt for training
 annotation_mode     = 0
 
 classes_path        = 'model_data/new_classes.txt'
@@ -44,7 +44,7 @@ def convert_annotation(year, image_id, list_file):
 if __name__ == "__main__":
     random.seed(0)
     if " " in os.path.abspath(VOCdevkit_path):
-        raise ValueError("数据集存放的文件夹路径与图片名称中不可以存在空格，否则会影响正常的模型训练，请注意修改。")
+        raise ValueError("There must be no spaces in the folder path and image name where the data set is stored, otherwise it will affect the normal model training, please pay attention to modification.")
 
     if annotation_mode == 0 or annotation_mode == 1:
         print("Generate txt in ImageSets.")
@@ -124,8 +124,8 @@ if __name__ == "__main__":
         printTable(tableData, colWidths)
 
         if photo_nums[0] <= 500:
-            print("训练集数量小于500，属于较小的数据量，请注意设置较大的训练世代（Epoch）以满足足够的梯度下降次数（Step）。")
+            print("The number of training sets is less than 500, which belongs to a small amount of data. Please pay attention to setting a larger training generation (Epoch) to meet sufficient gradient descent times (Step).")
 
         if np.sum(nums) == 0:
-            print("在数据集中并未获得任何目标，请注意修改classes_path对应自己的数据集，并且保证标签名字正确，否则训练将会没有任何效果！")
+            print("Did not get any target in the data set, please pay attention to modify the classes_path to correspond to your own data set, and ensure that the label name is correct, otherwise the training will have no effect!")
 
